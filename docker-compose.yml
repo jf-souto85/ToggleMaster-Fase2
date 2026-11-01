@@ -1,0 +1,135 @@
+services:
+  postgres-auth:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: togglemaster
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Configure POSTGRES_PASSWORD no .env}
+      POSTGRES_DB: auth_db
+    volumes:
+      - postgres-auth-data:/var/lib/postgresql/data
+      - ./auth-service/db/init.sql:/docker-entrypoint-initdb.d/01-auth.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U togglemaster -d auth_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  auth-service:
+    image: togglemaster/auth-service:local
+    build:
+      context: ./auth-service
+    environment:
+      PORT: "8001"
+      DATABASE_URL: "postgres://togglemaster:${POSTGRES_PASSWORD:?Configure POSTGRES_PASSWORD no .env}@postgres-auth:5432/auth_db?sslmode=disable"
+      MASTER_KEY: "${MASTER_KEY:?Configure MASTER_KEY no .env}"
+    ports:
+      - "127.0.0.1:8001:8001"
+    depends_on:
+      postgres-auth:
+        condition: service_healthy
+  flag-service:
+    image: togglemaster/flag-service:local
+    build:
+      context: ./flag-service
+    environment:
+      PORT: "8002"
+      DATABASE_URL: "postgres://togglemaster:${POSTGRES_PASSWORD:?Configure POSTGRES_PASSWORD no .env}@postgres-apps:5432/flags_db?sslmode=disable"
+      AUTH_SERVICE_URL: "http://auth-service:8001"
+    ports:
+    - "127.0.0.1:8002:8002"
+    depends_on:
+      postgres-apps:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+
+  targeting-service:
+    image: togglemaster/targeting-service:local
+    build:
+      context: ./targeting-service
+    environment:
+      PORT: "8003"
+      DATABASE_URL: "postgres://togglemaster:${POSTGRES_PASSWORD:?Configure POSTGRES_PASSWORD no .env}@postgres-apps:5432/targeting_db?sslmode=disable"
+      AUTH_SERVICE_URL: "http://auth-service:8001"
+    ports:
+      - "127.0.0.1:8003:8003"
+    depends_on:
+      postgres-apps:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+  evaluation-service:
+    image: togglemaster/evaluation-service:local
+    build:
+      context: ./evaluation-service
+    environment:
+      PORT: "8004"
+      REDIS_URL: "redis://redis:6379"
+      FLAG_SERVICE_URL: "http://flag-service:8002"
+      TARGETING_SERVICE_URL: "http://targeting-service:8003"
+      SERVICE_API_KEY: "${SERVICE_API_KEY:?Configure SERVICE_API_KEY no .env}"
+      AWS_REGION: "${AWS_REGION:?Configure AWS_REGION no .env}"
+      AWS_SQS_URL: "${AWS_SQS_URL:?Configure AWS_SQS_URL no .env}"
+      AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID:?Configure AWS_ACCESS_KEY_ID no .env}"
+      AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY:?Configure AWS_SECRET_ACCESS_KEY no .env}"
+    ports:
+      - "127.0.0.1:8004:8004"
+    depends_on:
+      redis:
+        condition: service_healthy
+      flag-service:
+        condition: service_started
+      targeting-service:
+        condition: service_started
+
+  analytics-service:
+    image: togglemaster/analytics-service:local
+    build:
+      context: ./analytics-service
+    environment:
+      PORT: "8005"
+      AWS_REGION: "${AWS_REGION:?Configure AWS_REGION no .env}"
+      AWS_SQS_URL: "${AWS_SQS_URL:?Configure AWS_SQS_URL no .env}"
+      AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID:?Configure AWS_ACCESS_KEY_ID no .env}"
+      AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY:?Configure AWS_SECRET_ACCESS_KEY no .env}"
+      AWS_DYNAMODB_TABLE: "ToggleMasterAnalytics"
+      AWS_ENDPOINT_URL_DYNAMODB: "http://dynamodb-local:8000"
+    ports:
+      - "127.0.0.1:8005:8005"
+    depends_on:
+      dynamodb-local:
+        condition: service_started
+  postgres-apps:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: togglemaster
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Configure POSTGRES_PASSWORD no .env}
+      POSTGRES_DB: postgres
+    volumes:
+      - postgres-apps-data:/var/lib/postgresql/data
+      - ./docker/postgres/init-apps.sql:/docker-entrypoint-initdb.d/01-apps.sql:ro
+      - ./flag-service/db/init.sql:/scripts/flags.sql:ro
+      - ./targeting-service/db/init.sql:/scripts/targeting.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U togglemaster -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  dynamodb-local:
+    image: amazon/dynamodb-local:latest
+    command: ["-jar", "DynamoDBLocal.jar", "-sharedDb", "-inMemory"]
+    ports:
+      - "127.0.0.1:8000:8000"
+
+volumes:
+  postgres-auth-data:
+  postgres-apps-data:

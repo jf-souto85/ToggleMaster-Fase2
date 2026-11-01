@@ -1,0 +1,73 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: sqs-load-test
+  namespace: togglemaster
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 240
+  ttlSecondsAfterFinished: 600
+  template:
+    spec:
+      serviceAccountName: evaluation-service
+      restartPolicy: Never
+      containers:
+        - name: producer
+          image: YOUR_AWS_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/togglemaster/analytics-service:v1
+          command: ["python", "-u", "-c"]
+          args:
+            - |
+              import boto3
+              import datetime
+              import json
+              import time
+              import uuid
+
+              sqs = boto3.client("sqs", region_name="us-east-1")
+              queue = "https://sqs.us-east-1.amazonaws.com/YOUR_AWS_ACCOUNT_ID/togglemaster-events-local"
+              run_id = str(uuid.uuid4())
+              sent = 0
+
+              print(f"Iniciando lote: {run_id}", flush=True)
+
+              for batch in range(600):
+                  started = time.monotonic()
+                  entries = []
+
+                  for index in range(10):
+                      body = {
+                          "user_id": f"manual-{run_id}-{batch}-{index}",
+                          "flag_name": "enable-new-dashboard",
+                          "result": True,
+                          "timestamp": datetime.datetime.now(
+                              datetime.timezone.utc
+                          ).isoformat()
+                      }
+                      entries.append({
+                          "Id": str(index),
+                          "MessageBody": json.dumps(body)
+                      })
+
+                  response = sqs.send_message_batch(
+                      QueueUrl=queue,
+                      Entries=entries
+                  )
+
+                  if response.get("Failed"):
+                      raise RuntimeError(response["Failed"])
+
+                  sent += len(response.get("Successful", []))
+
+                  if (batch + 1) % 50 == 0:
+                      print(f"Mensagens enviadas: {sent}", flush=True)
+
+                  time.sleep(max(0, 0.2 - (time.monotonic() - started)))
+
+              print(f"Concluido. Total enviado: {sent}", flush=True)
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi

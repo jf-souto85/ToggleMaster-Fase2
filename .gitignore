@@ -1,0 +1,17 @@
+.env
+.env.*
+!.env.example
+
+**/.aws/
+**/.kube/
+**/.venv/
+**/venv/
+**/__pycache__/
+*.pyc
+*.log
+*.invalid
+
+# Credenciais e arquivos privados
+secrets/
+*.pem
+*.key

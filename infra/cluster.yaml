@@ -1,0 +1,40 @@
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:
+  name: togglemaster-eks
+  region: us-east-1
+  version: "1.36"
+  tags:
+    Project: ToggleMaster
+    Environment: academic
+
+availabilityZones:
+  - us-east-1a
+  - us-east-1b
+
+iam:
+  withOIDC: true
+
+vpc:
+  cidr: "10.20.0.0/16"
+  nat:
+    gateway: Disable
+  clusterEndpoints:
+    publicAccess: true
+    privateAccess: true
+
+managedNodeGroups:
+  - name: togglemaster-workers
+    instanceType: t3.medium
+    amiFamily: AmazonLinux2023
+    desiredCapacity: 2
+    minSize: 1
+    maxSize: 4
+    volumeSize: 20
+    volumeType: gp3
+    privateNetworking: false
+    ssh:
+      allow: false
+    labels:
+      project: togglemaster

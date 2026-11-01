@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: analytics-config
+  namespace: togglemaster
+data:
+  PORT: "8005"
+  AWS_REGION: "us-east-1"
+  AWS_SQS_URL: "https://sqs.us-east-1.amazonaws.com/YOUR_AWS_ACCOUNT_ID/togglemaster-events-local"
+  AWS_DYNAMODB_TABLE: "ToggleMasterAnalytics"
+  AWS_STS_REGIONAL_ENDPOINTS: "regional"

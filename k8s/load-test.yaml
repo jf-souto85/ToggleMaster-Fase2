@@ -1,0 +1,33 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: evaluation-load-test
+  namespace: togglemaster
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 180
+  ttlSecondsAfterFinished: 300
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: load-test
+          image: fortio/fortio:1.69.0
+          args:
+            - load
+            - -t
+            - 120s
+            - -c
+            - "8"
+            - -qps
+            - "100"
+            - -H
+            - "Host: togglemaster.test"
+            - http://togglemaster-nginx-nginx-ingress-controller.nginx-ingress.svc.cluster.local/evaluate?user_id=teste-carga&flag_name=enable-new-dashboard
+          resources:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 128Mi

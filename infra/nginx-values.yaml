@@ -1,0 +1,31 @@
+controller:
+  nginxplus: false
+  replicaCount: 1
+
+  ingressClass:
+    name: nginx
+    create: true
+    setAsDefaultIngress: false
+
+  service:
+    type: LoadBalancer
+    loadBalancerClass: service.k8s.aws/nlb
+    externalTrafficPolicy: Cluster
+
+    httpsPort:
+      enable: false
+
+    annotations:
+      service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
+      service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: "ip"
+      service.beta.kubernetes.io/aws-load-balancer-subnets: "YOUR_SUBNET_ID,YOUR_SUBNET_ID"
+      service.beta.kubernetes.io/aws-load-balancer-attributes: "load_balancing.cross_zone.enabled=true"
+      service.beta.kubernetes.io/aws-load-balancer-additional-resource-tags: "Project=ToggleMaster,Environment=academic"
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
